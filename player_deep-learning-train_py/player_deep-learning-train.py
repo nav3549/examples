@@ -24,6 +24,7 @@ import sys
 
 import base64
 import numpy as np
+import tensorflow as tf
 
 #from PIL import Image
 from dqn_nn import NeuralNetwork
@@ -57,9 +58,9 @@ Y = 1
 TH = 2
 ACTIVE = 3
 TOUCH = 4
-
+path =  "./dqn"
 #path to your checkpoint
-CHECKPOINT = os.path.join(os.path.dirname(__file__), 'dqn.ckpt')
+CHECKPOINT = os.path.join(os.path.dirname(__file__), path+'/dqn.ckpt')
 
 class Received_Image(object):
     def __init__(self, resolution, colorChannels):
@@ -159,13 +160,16 @@ class Component(ApplicationSession):
             self.observation_steps = 5000 # Number of iterations to observe before training every generation
             self.save_every_steps = 5000 # Save checkpoint
             self.num_actions = 11 # Number of possible possible actions
+            self.action = 0
+            self.previous_action = 0
             self._frame = 0
             self._iterations = 0
             self.minibatch_size = 64
             self.gamma = 0.99
             self.sqerror = 100 # Initial sqerror value
-            self.Q = NeuralNetwork(None, False, False) # 2nd term: False to start training from scratch, use CHECKPOINT to load a checkpoint
-            self.Q_ = NeuralNetwork(self.Q, False, True)
+            self.sess = tf.InteractiveSession()
+            self.Q = NeuralNetwork(self.sess, None, False, False) # 3rd term: False to start training from scratch, use CHECKPOINT to load a checkpoint
+            self.Q_ = NeuralNetwork(self.sess, self.Q, False, True)
             self.wheels = [0 for _ in range(10)]
             return
 ##############################################################################
@@ -305,21 +309,23 @@ class Component(ApplicationSession):
 
             # Action
             if np.random.rand() < self.epsilon:
-                action = random.randint(0,10)
+                self.action = random.randint(0,10)
             else:
-                action = self.Q.BestAction(np.array(position)) # using CNNs use final_img as input
+                self.action = self.Q.BestAction(np.array(position)) # using CNNs use final_img as input
 
             # Set robot wheels
-            set_action(0, action)
+            set_action(0, self.action)
             set_wheel(self, self.wheels)
 
             # Update Replay Memory
-            self.D.append([np.array(position), action, reward])
+            self.D.append([np.array(position), self.action, reward])
 ##############################################################################
 
 ##############################################################################
 
             # Training!
+            if not os.path.exists(path):
+                os.makedirs(path)
             if len(self.D) >= self.observation_steps:
                 self._iterations += 1
                 a = np.zeros((self.minibatch_size, self.num_actions))
@@ -367,6 +373,7 @@ class Component(ApplicationSession):
 ##############################################################################
 
             self.end_of_frame = False
+            self.previous_action = self.action
 
 
     def onDisconnect(self):
